@@ -11,14 +11,15 @@ const token = fs.readFileSync('TOKEN.DISCORD.BOT.txt', 'utf-8').trim();
 // Set up the bot with necessary intents
 const client = new Client({
     intents: [
-        GatewayIntentBits.Guilds, // To manage guilds
-        GatewayIntentBits.GuildVoiceStates, // To manage voice channels
-        GatewayIntentBits.GuildMessages, // To read and send messages
-        GatewayIntentBits.MessageContent // To read the content of messages
+        GatewayIntentBits.Guilds, // Allows the bot to receive guild-related events
+        GatewayIntentBits.GuildMessages, // Allows the bot to read and send messages
+        GatewayIntentBits.MessageContent, // Allows the bot to read the content of messages
+        GatewayIntentBits.GuildVoiceStates // Allows the bot to manage and join voice channels
     ]
 });
 
 let queue = [];
+let announcementChannelId = null;
 let logData = "";
 
 // Logging function
@@ -38,6 +39,10 @@ client.on('messageCreate', async message => {
 
     // Ignore messages from bots
     if (message.author.bot) return;
+
+    if (message.content.startsWith('!ping')) {
+        message.channel.send('Pong!');
+    }
 
     if (message.content.startsWith('!play')) {
         let url = message.content.split(' ')[1];
@@ -87,10 +92,51 @@ client.on('messageCreate', async message => {
             message.channel.send(`Invalid index. There are ${queue.length} songs in the queue.`);
         }
     }
+
+    if (message.content.startsWith('!channel')) {
+        let channel = message.mentions.channels.first();
+        if (channel) {
+            announcementChannelId = channel.id;
+            message.channel.send(`Announcement channel set to: ${channel.name}`);
+        } else {
+            message.channel.send('Please mention a valid channel.');
+        }
+    }
+
+    if (message.content === '!commands') {
+        const helpText = `
+        **Available Commands:**
+        !join - Tells the bot to join the voice channel
+        !leave - To make the bot leave the voice channel
+        !play <url> - To add songs to the playlist and join the voice channel
+        !stop - Stops the whole playlist and disconnects the bot
+        !skip - Skips the active song
+        !rem <index> - Removes a particular song from the playlist
+        !channel <#channel> - Sets the channel for song announcements
+        !commands - Lists all commands and supported links
+        !creds - Lists the credits to the creators
+        
+        **Supported Links:**
+        - YouTube
+        - SoundCloud
+        - Spotify (will attempt to find a YouTube equivalent)
+        - Bandcamp
+        - Attachments: .mp3, .wav
+        `;
+        message.channel.send(helpText);
+    }
+
+    if (message.content === '!creds') {
+        const credsText = `
+        This bot was created by [Your Name or Team Name].
+        Powered by discord.js, yt-dlp, and other open-source projects.
+        `;
+        message.channel.send(credsText);
+    }
 });
 
 // Function to play the next song in the queue
-function playNext(connection, message) {
+async function playNext(connection, message) {
     if (queue.length > 0) {
         const stream = ytdl(queue[0], { filter: 'audioonly' });
         const dispatcher = connection.play(stream);
@@ -102,6 +148,13 @@ function playNext(connection, message) {
 
         log(`Now playing: ${queue[0]}`);
         message.channel.send(`**Now playing:** ${queue[0]}`);
+
+        if (announcementChannelId) {
+            const channel = client.channels.cache.get(announcementChannelId);
+            if (channel) {
+                channel.send(`**Now playing:** ${queue[0]}`);
+            }
+        }
     }
 }
 
